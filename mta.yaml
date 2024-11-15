@@ -1,0 +1,175 @@
+_schema-version: 3.3.0
+ID: btp-cap-cloud-identity-demo
+version: 1.0.0
+description: "A simple CAP project."
+parameters:
+  enable-parallel-deployments: true
+  deploy_mode: html5-repo
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
+modules:
+  - name: btp-cap-cloud-identity-demo-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      buildpack: nodejs_buildpack
+      readiness-health-check-type: http
+      readiness-health-check-http-endpoint: /health
+    build-parameters:
+      builder: npm
+    # properties:
+    #   IAS_PKCE_XCHANGE_ENABLED: true
+    provides:
+      - name: srv-api # required by consumers of CAP services (e.g. approuter)
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: btp-cap-cloud-identity-demo-db
+      - name: btp-cap-cloud-identity-demo-auth
+      - name: btp-cap-cloud-identity-demo-logs
+      - name: btp-cap-cloud-identity-demo-ias
+        parameters:
+          config:
+            credential-type: X509_GENERATED
+            validity: 365
+            validity-type: DAYS
+
+  - name: btp-cap-cloud-identity-demo-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: btp-cap-cloud-identity-demo-db
+
+  - name: btp-cap-cloud-identity-demo-app-deployer
+    type: com.sap.application.content
+    path: gen
+    requires:
+      - name: btp-cap-cloud-identity-demo-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: app/
+      requires:
+        - name: btpcapcloudidentitydemoadminbooks
+          artifacts:
+            - admin-books.zip
+          target-path: app/
+        - name: btpcapcloudidentitydemobrowse
+          artifacts:
+            - browse.zip
+          target-path: app/
+
+  - name: btpcapcloudidentitydemoadminbooks
+    type: html5
+    path: app/admin-books
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm ci
+        - npm run build
+      supported-platforms:
+        []
+  - name: btpcapcloudidentitydemobrowse
+    type: html5
+    path: app/browse
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm ci
+        - npm run build
+      supported-platforms:
+        []
+
+  - name: btp-cap-cloud-identity-demo
+    type: approuter.nodejs
+    path: router
+    parameters:
+      keep-existing-routes: true
+      disk-quota: 256M
+      memory: 256M
+    # properties:
+    #   IAS_PKCE_XCHANGE_ENABLED: true
+    #   DYNAMIC_IDENTITY_PROVIDER: true
+    requires:
+      - name: srv-api
+        group: destinations
+        properties:
+          name: srv-api # must be used in xs-app.json as well
+          url: ~{srv-url}
+          forwardAuthToken: true
+      - name: btp-cap-cloud-identity-demo-auth
+      - name: btp-cap-cloud-identity-demo-html5-runtime
+      - name: btp-cap-cloud-identity-demo-logs
+      - name: btp-cap-cloud-identity-demo-ias
+        parameters:
+          config:
+            credential-type: X509_GENERATED
+            validity: 365
+            validity-type: DAYS
+
+resources:
+  - name: btp-cap-cloud-identity-demo-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+
+  - name: btp-cap-cloud-identity-demo-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+
+  - name: btp-cap-cloud-identity-demo-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+      config:
+        xsappname: btp-cap-cloud-identity-demo-${org}-${space}
+        tenant-mode: dedicated
+
+  - name: btp-cap-cloud-identity-demo-ias
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: identity
+      service-plan: application
+      appname: btp-cap-cloud-identity-demo-${org}-${space}
+      config:
+        display-name: btp-cap-cloud-identity-demo-${org}-${space}
+        oauth2-configuration:
+          post-logout-redirect-uris:
+          - https://*.cfapps.us10.hana.ondemand.com/*/logout.html
+          redirect-uris:
+          - https://*.cfapps.us10.hana.ondemand.com/**
+          - http://localhost:5000/**
+        subject-name-identifier:
+          attribute: mail
+          fallback-attribute: none
+        xsuaa-cross-consumption: true
+        multi-tenant: false
+
+  - name: btp-cap-cloud-identity-demo-logs
+    optional: false
+    active: true
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: application-logs
+      service-name: btp-cap-cloud-identity-demo-logs
+      service-plan: lite
+
+  - name: btp-cap-cloud-identity-demo-html5-runtime
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-runtime
+
