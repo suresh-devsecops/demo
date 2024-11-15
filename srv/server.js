@@ -19,4 +19,4 @@ cds.on('bootstrap', app => {
 });
 
 // Serve CAP OData and REST services
-module.exports = cds.server;%
+module.exports = cds.server;
