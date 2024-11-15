@@ -1,0 +1,32 @@
+{
+  "authenticationMethod": "route",
+  "welcomeFile":"/appx/index.html",
+  "routes": [
+    {
+      "source": "^/appx/(.*)$",
+      "target": "/appx/$1",
+      "localDir": ".",
+      "cacheControl": "no-cache, no-store, must-revalidate"
+    },
+    {
+      "source": "^/appconfig/(.*)$",
+      "target": "/appx/appconfig/$1",
+      "localDir": ".",
+      "cacheControl": "no-cache, no-store, must-revalidate"
+    },
+    {
+      "source": "^/?odata/(.*)$",
+      "target": "/odata/$1",
+      "destination": "srv-api",
+      "csrfProtection": true,
+      "authenticationType": "xsuaa",
+      "scope": ["admin"]
+    },
+    {
+      "source": "^(.*)$",
+      "target": "$1",
+      "service": "html5-apps-repo-rt",
+      "authenticationType": "xsuaa"
+    }
+  ]
+}
